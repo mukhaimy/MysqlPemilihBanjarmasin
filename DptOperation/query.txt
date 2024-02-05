@@ -1,0 +1,11 @@
+select 
+  id_dpt_penduduk, nama, nik, alamat,
+  TIMESTAMPDIFF(YEAR, lahir_tanggal, CURDATE()) AS age,  
+  (TIMESTAMPDIFF(YEAR, lahir_tanggal, CURDATE()) - 1) as age1
+from dpt_penduduk 
+where 
+  nama = 'ABDUL HAMID' and
+  kelurahan = 'BENUA LAWAS' and
+  kecamatan = 'TAKISUNG';
+
+----------------------------------------

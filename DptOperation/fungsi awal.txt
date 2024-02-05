@@ -1,0 +1,219 @@
+
+        #region Fungsi awal
+        static void F1()
+        {
+            string filename = @"D:\Development2023\15\DptOperation\by name DPT\TL2.xlsx";
+
+            for (int iSheet = 0; iSheet < 11; iSheet++)
+            {
+                Console.WriteLine("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+                Console.WriteLine("SHEET: " + iSheet.ToString());
+                Console.WriteLine("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+                List<Penduduk> pendudukList =
+                GetPendudukFromExcel(filename, iSheet, "KALIMANTAN SELATAN", "KABUPATEN TANAH LAUT");
+                UpdateKodeKecamatan(pendudukList);
+
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine($"Total Data = {pendudukList.Count}");
+                int nData = AddPendudukListToTabel(pendudukList);
+                Console.WriteLine();
+
+            }
+        }
+
+        private static void UpdateKodeKecamatan(List<Penduduk> penduduks)
+        {
+            string namaKeluarahan = string.Empty;
+            string namaKecamatan = string.Empty;
+            string hslKode = string.Empty;
+
+            string connStr = "server=localhost;database=dpt_caleg_ea;uid=root;pwd=P@ssw0rd;port=3306";
+            MySqlConnection connection = new MySqlConnection(connStr);
+            connection.Open();
+
+            foreach (var item in penduduks)
+            {
+                if (item.kecamatan != namaKecamatan || item.kelurahan != namaKeluarahan)
+                {
+                    namaKeluarahan = item.kelurahan;
+                    namaKecamatan = item.kecamatan;
+
+                    MySqlCommand cmd = new MySqlCommand("sp_get_kode_kelurahan", connection);
+
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    cmd.Parameters.AddWithValue("@kel_nama", namaKeluarahan);
+                    cmd.Parameters.AddWithValue("@kec_nama", namaKecamatan);
+                    var tkode = cmd.ExecuteScalar();
+                    if (tkode != null)
+                    {
+                        hslKode = tkode.ToString();
+                    }
+                    else
+                    {
+                        hslKode = "";
+                    }
+
+                }
+                item.kode_kelurahan = hslKode;
+            }
+
+
+            connection.Close();
+        }
+
+        static string GetKodeKelurahan(string namaKeluarahan, string namaKecamatan, MySqlConnection conn)
+        {
+            MySqlCommand cmd = new MySqlCommand("sp_get_kode_kelurahan", conn);
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.AddWithValue("@kel_nama", namaKeluarahan);
+            cmd.Parameters.AddWithValue("@kec_nama", namaKecamatan);
+            string hsl = cmd.ExecuteScalar().ToString();
+
+            return hsl;
+        }
+
+        static bool CheckMyConnection()
+        {
+            string conn = "server=localhost;database=dpt_caleg_ea;uid=root;pwd=P@ssw0rd;port=3306";
+            bool result = false;
+
+            MySqlConnection connection = new MySqlConnection(conn);
+            try
+            {
+                connection.Open();
+                result = true;
+                connection.Close();
+            }
+            catch
+            {
+                result = false;
+            }
+
+            return result;
+        }
+
+        static List<Penduduk> GetPendudukFromExcel(string filename, int sheetnum,
+            string provinsi1, string kota1)
+        {
+            List<Penduduk> pendudukList = new List<Penduduk>();
+
+            FileInfo existingFile = new FileInfo(filename);
+            using (ExcelPackage package = new ExcelPackage(existingFile))
+            {
+                //get the first worksheet in the workbook
+                ExcelWorksheet worksheet = package.Workbook.Worksheets[sheetnum];
+                int colCount = worksheet.Dimension.End.Column;  //get Column Count
+                int rowCount = worksheet.Dimension.End.Row;     //get row count
+
+                // for (int row = 2; row <= 4; row++)
+                for (int row = 2; row <= rowCount; row++)
+                {
+                    if (row % 2000 == 0)
+                    {
+                        Console.Write(row);
+                        Console.Write("  ");
+                    }
+                    try
+                    {
+                        Penduduk p1 = new Penduduk();
+
+                        p1.kecamatan = worksheet.Cells[row, 1].Text;
+                        p1.kelurahan = worksheet.Cells[row, 2].Text;
+
+                        p1.nkk = worksheet.Cells[row, 3].Text;
+                        p1.nik = worksheet.Cells[row, 4].Text;
+                        p1.nama = worksheet.Cells[row, 5].Text;
+                        if (string.IsNullOrEmpty(p1.nik) ||
+                            string.IsNullOrEmpty(p1.nama) ||
+                            p1.nik.Length < 15)
+                        {
+                            continue;
+                        }
+                        p1.lahir_tempat = worksheet.Cells[row, 6].Text;
+
+                        p1.jenis_kelamin = worksheet.Cells[row, 9].Text;
+                        p1.alamat = worksheet.Cells[row, 10].Text;
+                        p1.rt = worksheet.Cells[row, 11].Text;
+                        p1.rw = worksheet.Cells[row, 12].Text;
+
+                        p1.kota = kota1;
+                        p1.provinsi = provinsi1;
+
+                        // p1.tanggal_lahir
+                        string sTanggalLahir = worksheet.Cells[row, 7].Text.ToString();
+                        if (!string.IsNullOrEmpty(sTanggalLahir))
+                        {
+                            p1.lahir_tanggal = DateTime.ParseExact(sTanggalLahir, "dd|MM|yyyy", CultureInfo.InvariantCulture);
+                        }
+
+                        pendudukList.Add(p1);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine($"ERR ({row}): {ex.Message}");
+                    }
+
+                }
+            }
+            return pendudukList;
+        }
+        // EOFunc : List<Penduduk> GetPendudukListFromExcel(string filename)
+
+        static int AddPendudukListToTabel(List<Penduduk> pendudukList)
+        {
+            int trow = 1;
+            int nData = 0;
+            string tnik = "";
+            string tnama = "";
+
+            string strConn = "server=localhost;database=dpt_caleg_ea;uid=root;pwd=P@ssw0rd;port=3306";
+            MySqlConnection conn = new MySqlConnection(strConn);
+            conn.Open();
+            string insertQuery = Penduduk.InsertString("dpt_penduduk");
+
+            foreach (var item in pendudukList)
+            {
+                try
+                {
+                    tnik = item.nik;
+                    tnama = item.nama;
+                    MySqlCommand cmd = new MySqlCommand(insertQuery, conn);
+                    cmd.Parameters.AddWithValue("@nkk", item.nkk);
+                    cmd.Parameters.AddWithValue("@nik", item.nik);
+                    cmd.Parameters.AddWithValue("@nama", item.nama);
+                    cmd.Parameters.AddWithValue("@lahir_tempat", item.lahir_tempat);
+                    cmd.Parameters.AddWithValue("@lahir_tanggal", item.lahir_tanggal);
+
+                    cmd.Parameters.AddWithValue("@jenis_kelamin", item.jenis_kelamin);
+                    cmd.Parameters.AddWithValue("@alamat", item.alamat);
+                    cmd.Parameters.AddWithValue("@rt", item.rt);
+                    cmd.Parameters.AddWithValue("@rw", item.rw);
+
+                    cmd.Parameters.AddWithValue("@kelurahan", item.kelurahan);
+                    cmd.Parameters.AddWithValue("@kecamatan", item.kecamatan);
+                    cmd.Parameters.AddWithValue("@kota", item.kota);
+                    cmd.Parameters.AddWithValue("@provinsi", item.provinsi);
+                    cmd.Parameters.AddWithValue("@kode_kelurahan", item.kode_kelurahan);
+
+
+                    cmd.ExecuteNonQuery();
+                    ++nData;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"{trow}/{tnik}-{tnama} \t {ex.Message}");
+                }
+                finally
+                {
+                    ++trow;
+                }
+            }
+            conn.Close();
+
+            Console.WriteLine($"Total Data READ = {trow - 1} --- WRITE = {nData}");
+            return --nData;
+        }
+
+        #endregion
